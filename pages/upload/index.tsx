@@ -1,8 +1,35 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
+import { uploadFile } from '@/utils/uploadQueue';
 
 export default function Upload() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const MAX_CONCURRENT = 3;
+  const [uploading, setUploading] = useState<File[]>([]);
+  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const idleFiles = files.filter(
+        (f) => !uploading.includes(f) && !progressMap[f.name]
+    );
+
+    if (uploading.length < MAX_CONCURRENT && idleFiles.length > 0) {
+        const toUpload = idleFiles.slice(0, MAX_CONCURRENT - uploading.length);
+        toUpload.forEach((file) => {
+        setUploading((prev) => [...prev, file]);
+
+        uploadFile({
+            file,
+            onProgress: (p) => {
+            setProgressMap((prev) => ({ ...prev, [file.name]: p }));
+            },
+            onComplete: () => {
+            setUploading((prev) => prev.filter((f) => f !== file));
+            }
+        });
+        });
+    }
+    }, [files, uploading, progressMap]);
 
   const handleFiles = (fileList: FileList) => {
     const newFiles = Array.from(fileList);
@@ -20,8 +47,10 @@ export default function Upload() {
 
       <ul>
         {files.map((file, idx) => (
-          <li key={idx}>{file.name}</li>
-        ))}
+            <li key={idx}>
+                {file.name} — {progressMap[file.name] ?? 0}%
+            </li>
+            ))}
       </ul>
     </div>
   );
